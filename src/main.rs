@@ -8,7 +8,7 @@ use std::str::FromStr;
 #[tokio::main]
 async fn main() {
     // config file path setting
-    let config = std::path::Path::new("c:\\Users\\kentaro");
+    let config = std::path::Path::new("~");
     let config = config.join(".twitter").join("config");
     println!("{:?}", config);
     let config = Arc::new(config);
