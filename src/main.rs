@@ -4,15 +4,17 @@ use std::{collections::HashMap, fs::File, io::{BufReader, Write}};
 use chrono::{Date, DateTime, Duration, TimeZone, Utc};
 use cron::Schedule;
 use std::str::FromStr;
+use rand::Rng;
+
 
 #[tokio::main]
 async fn main() {
     // config file path setting
     let home_path = dirs::home_dir().unwrap();
-    let config = std::path::Path::new(&home_path);
-    let config = config.join(".twitter").join("config");
+    let config = home_path.join(".twitter").join("config");
     println!("{:?}", config);
 
+    // 1時間ごとに job を実行する
     let schedule = Schedule::from_str("0 0 * * * * *").unwrap();
 
     while let Some(datetime) = schedule.upcoming(Utc).next() {
@@ -28,9 +30,8 @@ async fn main() {
 async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
     // read tasks.json and get latest task timestamp
     let home_path = dirs::home_dir().unwrap();
-    let tasks_filename = std::path::Path::new(&home_path);
-    let tasks_filename = tasks_filename.join(".twitter").join("tasks.json");
-    let file = File::open(tasks_filename).unwrap();
+    let tasks_filename = home_path.join(".twitter").join("tasks.json");
+    let file = File::open(tasks_filename.clone()).unwrap();
     let reader = BufReader::new(file);
     let mut tasks:Tasks = serde_json::from_reader(reader).unwrap();
     //println!("{:#?}", tasks);
@@ -38,6 +39,7 @@ async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
         task.timestamp
     }).max().unwrap_or(0i64);
     //println!("{:?}", timestamp);
+    let mut rng = rand::thread_rng();
 
     // read config file and use Twitter API
     match Client::from_config(config) {
@@ -86,9 +88,12 @@ async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
                     let status = format!("@{}\n{}\n{}", task.user, task.title, task.comment);
                     println!("\nTweet: {}\n", status);
                     let _response = client.tweet(&status).await?;
-                    next_date = next_date + Duration::days(7);
-                    println!("next_date: {} -> {}", task.next_date, next_date.to_string());
+
+                    // [3,11)の範囲のランダムな値 * count だけ日をずらす
+                    let days:i64 = rng.gen_range(3, 11) * task.count;
+                    next_date = next_date + Duration::days(days);
                     task.next_date = next_date.to_string();
+                    task.count += 1;
                 }
             }
         }
@@ -100,9 +105,6 @@ async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let json = serde_json::to_string(&tasks).unwrap();
     //println!("{:?}", json);
-    let home_path = dirs::home_dir().unwrap();
-    let tasks_filename = std::path::Path::new(&home_path);
-    let tasks_filename = tasks_filename.join(".twitter").join("tasks.json");
     let mut new_json = File::create(tasks_filename).unwrap();
     new_json.write_all(json.as_bytes()).unwrap();
 
