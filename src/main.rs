@@ -1,17 +1,17 @@
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
-use std::{collections::HashMap, fs::File, io::{BufReader, Write}, sync::Arc, time};
-use chrono::{Date, DateTime, Duration, Local, TimeZone, Utc};
+use std::{collections::HashMap, fs::File, io::{BufReader, Write}};
+use chrono::{Date, DateTime, Duration, TimeZone, Utc};
 use cron::Schedule;
 use std::str::FromStr;
 
 #[tokio::main]
 async fn main() {
     // config file path setting
-    let config = std::path::Path::new("~");
+    let home_path = dirs::home_dir().unwrap();
+    let config = std::path::Path::new(&home_path);
     let config = config.join(".twitter").join("config");
     println!("{:?}", config);
-    let config = Arc::new(config);
 
     let schedule = Schedule::from_str("0 0 * * * * *").unwrap();
 
@@ -27,7 +27,9 @@ async fn main() {
 
 async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
     // read tasks.json and get latest task timestamp
-    let tasks_filename = "tasks.json";
+    let home_path = dirs::home_dir().unwrap();
+    let tasks_filename = std::path::Path::new(&home_path);
+    let tasks_filename = tasks_filename.join(".twitter").join("tasks.json");
     let file = File::open(tasks_filename).unwrap();
     let reader = BufReader::new(file);
     let mut tasks:Tasks = serde_json::from_reader(reader).unwrap();
@@ -85,6 +87,7 @@ async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
                     println!("\nTweet: {}\n", status);
                     let _response = client.tweet(&status).await?;
                     next_date = next_date + Duration::days(7);
+                    println!("next_date: {} -> {}", task.next_date, next_date.to_string());
                     task.next_date = next_date.to_string();
                 }
             }
@@ -97,7 +100,10 @@ async fn job(config: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let json = serde_json::to_string(&tasks).unwrap();
     //println!("{:?}", json);
-    let mut new_json = File::create("tasks.json").unwrap();
+    let home_path = dirs::home_dir().unwrap();
+    let tasks_filename = std::path::Path::new(&home_path);
+    let tasks_filename = tasks_filename.join(".twitter").join("tasks.json");
+    let mut new_json = File::create(tasks_filename).unwrap();
     new_json.write_all(json.as_bytes()).unwrap();
 
     Ok(())
